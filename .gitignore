@@ -1,0 +1,10 @@
+# Local configuration
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+.venv/
