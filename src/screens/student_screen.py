@@ -17,22 +17,36 @@ from src.components.subject_card import subject_card
 def student_dashboard():
     student_data = st.session_state.student_data
     student_id = student_data['student_id']
+    with st.spinner('Loading your learning overview...'):
+        subjects = get_student_subjects(student_id)
+        logs = get_student_attendance(student_id)
+
+    total_sessions = len(logs)
+    attended_sessions = sum(1 for log in logs if log.get('is_present'))
+    attendance_rate = round((attended_sessions / total_sessions) * 100) if total_sessions else 0
+
     c1, c2 = st.columns(2, vertical_alignment='center', gap='xxlarge')
     with c1:
         header_dashboard()
     with c2:
-        st.subheader(f"""Welcome, {student_data['name']} """)
+        st.markdown(f"<div class='portal-kicker'>STUDENT PORTAL</div><h2 class='portal-title'>Good to see you, {student_data['name']}</h2><p class='portal-subtitle'>Keep your attendance on track, one class at a time.</p>", unsafe_allow_html=True)
         if st.button("Logout", type='secondary', key='loginbackbtn', shortcut="control+backspace"):
             st.session_state['is_logged_in'] = False
             del st.session_state.student_data 
             st.rerun()
 
 
-    st.space()
+    st.markdown("<div class='portal-rule'></div>", unsafe_allow_html=True)
+    metric1, metric2, metric3 = st.columns(3)
+    metric1.metric('Enrolled courses', len(subjects))
+    metric2.metric('Sessions attended', attended_sessions)
+    metric3.metric('Attendance rate', f'{attendance_rate}%')
 
-    c1, c2 =st.columns(2)
+    c1, c2 = st.columns(2)
     with c1:
-        st.header('Your Enrolled Subjects')
+        st.markdown("<div class='portal-kicker'>YOUR LEARNING SPACE</div>", unsafe_allow_html=True)
+        st.header('Your courses')
+        st.caption('Open a course card below to review your attendance footprint.')
     with c2:
         if st.button('Enroll in Subject', type='primary', width='stretch'):
             enroll_dialog()
@@ -40,10 +54,6 @@ def student_dashboard():
 
     st.divider()
 
-
-    with st.spinner('Loading your enrolled subjects..'):
-        subjects = get_student_subjects(student_id)
-        logs = get_student_attendance(student_id)
 
     stats_map = {}
 
@@ -69,7 +79,7 @@ def student_dashboard():
         def unenroll_button():
                 if st.button("Unenroll from tihs course", type='tertiary', width='stretch', icon=':material/delete_forever:'):
                     unenroll_student_to_subject(student_id, sid)
-                    st.toast(f'Unenrolled from {sub['name']} successfully!')
+                    st.toast(f"Unenrolled from {sub['name']} successfully!")
                     st.rerun()
 
         with cols[i % 2]:
@@ -84,6 +94,8 @@ def student_dashboard():
                 ],
                 footer_callback=unenroll_button
             )
+    if not subjects:
+        st.info('You are not enrolled in any course yet. Use Enroll in Subject to join a class.')
     footer_dashboard()
 
 
@@ -133,7 +145,7 @@ def student_screen():
                         st.session_state.is_logged_in = True
                         st.session_state.user_role = 'student'
                         st.session_state.student_data = student
-                        st.toast(f'Welcome Back {student['name']}')
+                        st.toast(f"Welcome Back {student['name']}")
                         time.sleep(1)
                         st.rerun()
                 else:

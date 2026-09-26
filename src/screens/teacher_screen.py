@@ -17,6 +17,7 @@ import numpy as np
 from datetime import datetime
 
 import pandas as pd
+import httpx
 
 from src.database.config import supabase
 
@@ -40,22 +41,30 @@ def teacher_screen():
 
 def teacher_dashboard():
     teacher_data = st.session_state.teacher_data
+    subjects = get_teacher_subjects(teacher_data['teacher_id'])
+    total_students = sum(subject.get('total_students', 0) for subject in subjects)
+    total_classes = sum(subject.get('total_classes', 0) for subject in subjects)
+
     c1, c2 = st.columns(2, vertical_alignment='center', gap='xxlarge')
     with c1:
         header_dashboard()
     with c2:
-        st.subheader(f"""Welcome, {teacher_data['name']} """)
+        st.markdown(f"<div class='portal-kicker'>TEACHER PORTAL</div><h2 class='portal-title'>Welcome back, {teacher_data['name']}</h2><p class='portal-subtitle'>Your classroom command center is ready.</p>", unsafe_allow_html=True)
         if st.button("Logout", type='secondary', key='loginbackbtn', shortcut="control+backspace"):
             st.session_state['is_logged_in'] = False
             del st.session_state.teacher_data 
             st.rerun()
 
-
-    st.space()
+    st.markdown("<div class='portal-rule'></div>", unsafe_allow_html=True)
+    metric1, metric2, metric3 = st.columns(3)
+    metric1.metric('Subjects', len(subjects), help='Courses created by you')
+    metric2.metric('Learners', total_students, help='Total enrolled learners across subjects')
+    metric3.metric('Classes logged', total_classes, help='Attendance sessions recorded')
 
     if "current_teacher_tab" not in st.session_state:
         st.session_state.current_teacher_tab = 'take_attendance'
-    tab1, tab2, tab3 = st.columns(3)
+    st.markdown("<div class='portal-section-label'>WORKSPACE</div>", unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.columns(3, gap='small')
 
 
     with tab1:
@@ -77,7 +86,7 @@ def teacher_dashboard():
             st.rerun()
 
 
-    st.divider()
+    st.markdown("<div class='portal-rule'></div>", unsafe_allow_html=True)
 
     if st.session_state.current_teacher_tab == "take_attendance":
         teacher_tab_take_attendance()
@@ -93,7 +102,9 @@ def teacher_dashboard():
 
 def teacher_tab_take_attendance():
     teacher_id = st.session_state.teacher_data['teacher_id']
-    st.header('Take AI Attendance')
+    st.markdown("<div class='portal-kicker'>LIVE CLASSROOM TOOL</div>", unsafe_allow_html=True)
+    st.header('Take attendance')
+    st.caption('Choose a subject, add classroom photos, then run face or voice analysis.')
 
 
     if 'attendance_images' not in st.session_state:
@@ -102,7 +113,7 @@ def teacher_tab_take_attendance():
     subjects = get_teacher_subjects(teacher_id)
 
     if not subjects:
-        st.warning('You havent created any subjects yet! Please create one to begin!')
+        st.info('You have no subjects yet. Create your first subject in Manage Subjects to start taking attendance.')
         return
     
     subject_options = {f"{s['name']} - {s['subject_code']}": s['subject_id'] for s in subjects}
@@ -204,7 +215,9 @@ def teacher_tab_manage_subjects():
     teacher_id = st.session_state.teacher_data['teacher_id']
     col1, col2 = st.columns(2)
     with col1:
-        st.header('Manage Subjects', width='stretch')
+        st.markdown("<div class='portal-kicker'>COURSE ADMINISTRATION</div>", unsafe_allow_html=True)
+        st.header('Manage subjects', width='stretch')
+        st.caption('Organize courses, sections, and enrollment access.')
 
     with col2:
         if st.button('Create New Subject', width='stretch'):
@@ -232,17 +245,20 @@ def teacher_tab_manage_subjects():
             footer_callback=share_btn
         )
     else:
-        st.info("NO SUBJECTS FOUND. CREATE ONE ABOVE")
+        st.info("No subjects yet. Create one above to generate an enrollment code.")
 
 
 def teacher_tab_attendance_records():
-    st.header('Attendance Records')
+    st.markdown("<div class='portal-kicker'>HISTORY & INSIGHTS</div>", unsafe_allow_html=True)
+    st.header('Attendance records')
+    st.caption('Review recent attendance sessions across all your subjects.')
 
     teacher_id = st.session_state.teacher_data['teacher_id']
 
     records = get_attendance_for_teacher(teacher_id)
 
     if not records:
+        st.info('Attendance records will appear here after your first class session.')
         return
     
     data = []
@@ -287,8 +303,26 @@ def teacher_tab_attendance_records():
 def login_teacher(username, password):
     if not username or not password:
         return False
-    
-    teacher = teacher_login(username, password)
+
+    try:
+        teacher = teacher_login(username, password)
+    except httpx.ConnectError:
+        st.session_state.login_error = (
+            "Cannot connect to Supabase. Check SUPABASE_URL in "
+            ".streamlit/secrets.toml and confirm the project is active."
+        )
+        return False
+    except httpx.HTTPError:
+        st.session_state.login_error = (
+            "Supabase returned a network error. Check your internet connection "
+            "and Supabase project settings."
+        )
+        return False
+    except Exception:
+        st.session_state.login_error = (
+            "Login service is unavailable. Verify the Supabase URL and API key."
+        )
+        return False
 
     if teacher:
         st.session_state.user_role ='teacher'
@@ -297,6 +331,7 @@ def login_teacher(username, password):
         return True
     
 
+    st.session_state.login_error = "Invalid username or password."
     return False
 def teacher_screen_login():
     c1, c2 = st.columns(2, vertical_alignment='center', gap='xxlarge')
@@ -328,7 +363,7 @@ def teacher_screen_login():
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("Invalid username and password combo")
+                st.error(st.session_state.get('login_error', "Invalid username or password."))
 
     with btnc2:
         if st.button('Register Instead', type="primary", icon=':material/passkey:', width='stretch'):
